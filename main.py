@@ -4,8 +4,8 @@ import os
 # Configuration
 ORIGIN = "SFO"
 DESTINATION = "DOH"
-START_DATE = "2026-12-01"
-END_DATE = "2026-12-15"
+START_DATE = "2026-12-05"
+END_DATE = "2026-12-30"
 
 # Set desired cabin: 'J' = Business, 'F' = First, 'Y' = Economy, 'W' = Premium Economy
 CABIN_CODE = "J" 
