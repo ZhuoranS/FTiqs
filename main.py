@@ -1,17 +1,19 @@
 import requests
 import os
-import json
 
-# Configuration - Change these!
-ORIGIN = "SFO"
-DESTINATION = "DOH"
-START_DATE = "2026-12-01"
-END_DATE = "2026-12-26"
-CABIN = "business" # economy, business, first
+# Configuration
+ORIGIN = "DOH"
+DESTINATION = "JFK"
+START_DATE = "2025-12-01"
+END_DATE = "2025-12-15"
 
-# Load secrets from GitHub Environment
+# Set desired cabin: 'J' = Business, 'F' = First, 'Y' = Economy, 'W' = Premium Economy
+CABIN_CODE = "J" 
+
+# Load secrets from GitHub
+# Ensure your secret is exactly the key (e.g. seats:pro:123...)
 API_KEY = os.getenv("SEATS_API_KEY")
-DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK") # Optional
+DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 
 def send_notification(message):
     print(message)
@@ -20,7 +22,13 @@ def send_notification(message):
 
 def check_flights():
     url = "https://seats.aero/partnerapi/search"
-    headers = {"Partner-Authorization": API_KEY, "accept": "application/json"}
+    
+    # CRITICAL: Added 'Bearer ' prefix as per documentation
+    headers = {
+        "Partner-Authorization": f"Bearer {API_KEY}",
+        "accept": "application/json"
+    }
+    
     params = {
         "origin_airport": ORIGIN,
         "destination_airport": DESTINATION,
@@ -30,22 +38,34 @@ def check_flights():
     }
 
     response = requests.get(url, headers=headers, params=params)
+    
     if response.status_code != 200:
-        print(f"Error: {response.status_code}")
+        print(f"Error {response.status_code}: {response.text}")
         return
 
+    # Data is returned in a 'data' array of Availability objects
     data = response.json().get('data', [])
-    for f in data:
-        print(f)
-    found_seats = [f for f in data if f['Route']['Cabin'].lower() == CABIN.lower()]
+    found_seats = []
+
+    for item in data:
+        # Availability objects use {Cabin}Available (bool) and {Cabin}MileageCost (str)
+        is_available = item.get(f"{CABIN_CODE}Available", False)
+        cost = item.get(f"{CABIN_CODE}MileageCost", "N/A")
+        
+        if is_available:
+            found_seats.append({
+                "date": item.get("Date"),
+                "cost": cost,
+                "source": item.get("Source")
+            })
 
     if found_seats:
-        msg = f"✈️ Found {len(found_seats)} Qatar {CABIN} seats from {ORIGIN} to {DESTINATION}!"
-        for s in found_seats[:5]: # Show first 5 results
-            msg += f"\n- {s['Date']}: {s['Route']['MileageCost']} Avios"
+        msg = f"✈️ Found {len(found_seats)} Qatar Business (J) seats from {ORIGIN} to {DESTINATION}!"
+        for s in found_seats[:10]: # List up to 10 results
+            msg += f"\n- {s['date']}: {s['cost']} Avios"
         send_notification(msg)
     else:
-        print("No availability found for this check.")
+        print(f"No {CABIN_CODE} availability found for this check.")
 
 if __name__ == "__main__":
     check_flights()
