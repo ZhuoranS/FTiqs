@@ -5,7 +5,7 @@ import json
 # Configuration - Change these!
 ORIGIN = "SFO"
 DESTINATION = "DOH"
-START_DATE = "2026-12-15"
+START_DATE = "2026-12-01"
 END_DATE = "2026-12-26"
 CABIN = "business" # economy, business, first
 
