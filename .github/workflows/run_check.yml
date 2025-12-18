@@ -1,24 +1,26 @@
-name: Qatar Award Check SFO
+name: Qatar Award Sniper SFO
 
 on:
   schedule:
+    # Triggers at the top of the hour (:00)
+    # 22, 23 UTC = 2pm, 3pm PST
+    # 0, 1, 2, 3, 4 UTC = 4pm, 5pm, 6pm, 7pm, 8pm PST
     - cron: '0 22,23,0,1,2,3,4 * * *'
-  workflow_dispatch:
+  workflow_dispatch: # Allows you to start it manually for testing
 
 jobs:
-  check-seats:
+  snipe-seats:
     runs-on: ubuntu-latest
-    timeout-minutes: 65
+    timeout-minutes: 65 # Important: allows the 55-minute loop to finish
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      # RESTORE the state file from previous runs
+      # Restore the fingerprint state so you don't get double pings
       - name: Restore State
         uses: actions/cache@v3
         with:
           path: last_seen_savers.json
-          # Use a dynamic key so it's unique, but falls back to the most recent 'qatar-state-'
           key: qatar-state-${{ github.run_id }}
           restore-keys: |
             qatar-state-
@@ -35,13 +37,12 @@ jobs:
         env:
           SEATS_API_KEY: ${{ secrets.SEATS_API_KEY }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_USER_ID: "787603445729329163"
         run: python main.py
 
-      # SAVE the state file for the next run
-      # This step always runs even if the loop finishes
+      # Save state for the next hourly run
       - name: Save State
         if: always()
         uses: actions/cache@v3
         with:
-          path: last_seen_savers.json
-          key: qatar-state-${{ github.run_id }}
+          path: l
