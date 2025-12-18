@@ -23,9 +23,8 @@ def send_notification(message):
 def check_flights():
     url = "https://seats.aero/partnerapi/search"
     
-    # CRITICAL: Added 'Bearer ' prefix as per documentation
     headers = {
-        "Partner-Authorization": f"Bearer {API_KEY}",
+        "Partner-Authorization": API_KEY,
         "accept": "application/json"
     }
     
