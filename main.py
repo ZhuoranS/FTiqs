@@ -10,7 +10,7 @@ END_DATE = "2026-12-26"
 CABIN = "business" # economy, business, first
 
 # Load secrets from GitHub Environment
-API_KEY = os.getenv("pro_36zydSov8Qu3bkrJwnSo4scncqP")
+API_KEY = os.getenv("SEATS_API_KEY")
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK") # Optional
 
 def send_notification(message):
