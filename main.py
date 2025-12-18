@@ -35,6 +35,8 @@ def check_flights():
         return
 
     data = response.json().get('data', [])
+    for f in data:
+        print(f)
     found_seats = [f for f in data if f['Route']['Cabin'].lower() == CABIN.lower()]
 
     if found_seats:
