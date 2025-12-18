@@ -1,20 +1,27 @@
-name: Qatar Award Check
+name: Qatar Award Check SFO
 
 on:
   schedule:
-    # This triggers once at the start of every hour during your PST window
-    # 22-23 UTC is 2pm-3pm PST. 0-4 UTC is 4pm-8pm PST.
     - cron: '0 22,23,0,1,2,3,4 * * *'
   workflow_dispatch:
 
 jobs:
-  build:
+  check-seats:
     runs-on: ubuntu-latest
-    # Added a timeout to ensure the job doesn't run forever if something hangs
-    timeout-minutes: 65 
+    timeout-minutes: 65
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v3
+
+      # RESTORE the state file from previous runs
+      - name: Restore State
+        uses: actions/cache@v3
+        with:
+          path: last_seen_savers.json
+          # Use a dynamic key so it's unique, but falls back to the most recent 'qatar-state-'
+          key: qatar-state-${{ github.run_id }}
+          restore-keys: |
+            qatar-state-
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -24,8 +31,17 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-      - name: Run search script
+      - name: Run search loop
         env:
           SEATS_API_KEY: ${{ secrets.SEATS_API_KEY }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: python main.py
+
+      # SAVE the state file for the next run
+      # This step always runs even if the loop finishes
+      - name: Save State
+        if: always()
+        uses: actions/cache@v3
+        with:
+          path: last_seen_savers.json
+          key: qatar-state-${{ github.run_id }}
