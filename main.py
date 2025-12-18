@@ -4,8 +4,8 @@ import os
 # --- Configuration ---
 ORIGIN = "SFO"
 DESTINATION = "DOH"
-START_DATE = "2025-12-05"
-END_DATE = "2025-12-30"
+START_DATE = "2026-12-05"
+END_DATE = "2026-12-30"
 CABIN_CODE = "J" # J = Business
 
 # Define what you consider a 'Saver' price for this route.
