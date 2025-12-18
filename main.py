@@ -2,10 +2,10 @@ import requests
 import os
 
 # Configuration
-ORIGIN = "DOH"
-DESTINATION = "JFK"
-START_DATE = "2025-12-01"
-END_DATE = "2025-12-15"
+ORIGIN = "SFO"
+DESTINATION = "DOH"
+START_DATE = "2026-12-01"
+END_DATE = "2026-12-15"
 
 # Set desired cabin: 'J' = Business, 'F' = First, 'Y' = Economy, 'W' = Premium Economy
 CABIN_CODE = "J" 
