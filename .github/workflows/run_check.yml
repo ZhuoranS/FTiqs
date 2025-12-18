@@ -2,7 +2,11 @@ name: Qatar Award Check
 
 on:
   schedule:
-    - cron: '0 */4 * * *' # Runs every 4 hours
+    # Range 1: 2:00 PM to 3:30 PM PST (22:00 to 23:30 UTC)
+    - cron: '0,30 22-23 * * *'
+    
+    # Range 2: 4:00 PM to 8:00 PM PST (00:00 to 04:00 UTC)
+    - cron: '0,30 0-4 * * *'
   workflow_dispatch:      # Allows you to run it manually via a button
 
 jobs:
