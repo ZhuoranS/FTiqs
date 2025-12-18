@@ -1,33 +1,30 @@
 import requests
 import os
 
-# Configuration
+# --- Configuration ---
 ORIGIN = "SFO"
 DESTINATION = "DOH"
-START_DATE = "2026-12-05"
-END_DATE = "2026-12-30"
+START_DATE = "2025-12-05"
+END_DATE = "2025-12-30"
+CABIN_CODE = "J" # J = Business
 
-# Set desired cabin: 'J' = Business, 'F' = First, 'Y' = Economy, 'W' = Premium Economy
-CABIN_CODE = "J" 
+# Define what you consider a 'Saver' price for this route.
+# For Qatar Business US-DOH, Saver is usually 70,000.
+SAVER_THRESHOLD = 125000
 
-# Load secrets from GitHub
-# Ensure your secret is exactly the key (e.g. seats:pro:123...)
 API_KEY = os.getenv("SEATS_API_KEY")
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 
 def send_notification(message):
     print(message)
     if DISCORD_WEBHOOK:
-        requests.post(DISCORD_WEBHOOK, json={"content": message})
+        # Use an embed-style look for Discord
+        payload = {"content": message}
+        requests.post(DISCORD_WEBHOOK, json=payload)
 
 def check_flights():
     url = "https://seats.aero/partnerapi/search"
-    
-    headers = {
-        "Partner-Authorization": API_KEY,
-        "accept": "application/json"
-    }
-    
+    headers = {"Partner-Authorization": API_KEY, "accept": "application/json"}
     params = {
         "origin_airport": ORIGIN,
         "destination_airport": DESTINATION,
@@ -36,35 +33,58 @@ def check_flights():
         "sources": "qatar",
     }
 
-    response = requests.get(url, headers=headers, params=params)
-    
-    if response.status_code != 200:
-        print(f"Error {response.status_code}: {response.text}")
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"Error: {e}")
         return
 
-    # Data is returned in a 'data' array of Availability objects
     data = response.json().get('data', [])
-    found_seats = []
+    
+    saver_results = []
+    flexi_results = []
 
     for item in data:
-        # Availability objects use {Cabin}Available (bool) and {Cabin}MileageCost (str)
-        is_available = item.get(f"{CABIN_CODE}Available", False)
-        cost = item.get(f"{CABIN_CODE}MileageCost", "N/A")
-        
-        if is_available:
-            found_seats.append({
+        if item.get(f"{CABIN_CODE}Available"):
+            cost_str = item.get(f"{CABIN_CODE}MileageCost", "0")
+            cost = int(cost_str)
+            
+            flight_info = {
                 "date": item.get("Date"),
-                "cost": cost,
-                "source": item.get("Source")
-            })
+                "cost": f"{cost:,}",
+                "direct": "Yes" if item.get("Direct") else "No"
+            }
 
-    if found_seats:
-        msg = f"✈️ Found {len(found_seats)} Qatar Business (J) seats from {ORIGIN} to {DESTINATION}!"
-        for s in found_seats[:10]: # List up to 10 results
-            msg += f"\n- {s['date']}: {s['cost']} Avios"
+            if cost < SAVER_THRESHOLD:
+                saver_results.append(flight_info)
+            else:
+                flexi_results.append(flight_info)
+
+    # Construct Message
+    if not saver_results and not flexi_results:
+        print("No seats found.")
+        return
+
+    msg = f"🔎 **Qatar Airways Availability: {ORIGIN} ✈️ {DESTINATION}**\n"
+    
+    if saver_results:
+        msg += "\n🔥 **SAVER SEATS FOUND (CLASSIC tier)!** 🔥\n"
+        for s in saver_results:
+            msg += f"✅ {s['date']} - {s['cost']} Avios (Direct: {s['direct']})\n"
+    
+    if flexi_results:
+        msg += "\n⚠️ *Flexi Seats (Double Price):*\n"
+        # Only show the next 3 Flexi seats to keep the message clean
+        for s in flexi_results[:3]:
+            msg += f"• {s['date']} - {s['cost']} Avios\n"
+
+    # Only send notification if a Saver is found, 
+    # OR if you want an update regardless, remove this 'if'
+    if saver_results:
         send_notification(msg)
     else:
-        print(f"No {CABIN_CODE} availability found for this check.")
+        print("Found only Flexi seats. No notification sent.")
 
 if __name__ == "__main__":
     check_flights()
