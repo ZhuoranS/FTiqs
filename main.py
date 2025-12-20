@@ -126,7 +126,7 @@ def check_flights(last_fingerprint, is_high_freq):
             # Sort by date
             for f in sorted(flights, key=lambda x: x['date']):
                 # Using Discord Markdown for the link: [Text](URL)
-                msg += f"✅ {f['date']} | **{f['route']}** | {f['cost']} Avios | [View Search]({f['link']}) | *Seen {f['last_seen']}*\n"
+                msg += f"✅ {f['date']} | **{f['route']}** | {f['cost']} Avios | <[View Search]({f['link']})> | *Seen {f['last_seen']}*\n"
 
     if DISCORD_WEBHOOK:
         requests.post(DISCORD_WEBHOOK, json={"content": msg})
