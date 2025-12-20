@@ -13,24 +13,28 @@ CABIN_CODE = "J"
 SAVER_THRESHOLD = 125000
 STATE_FILE = "last_seen_savers.json"
 
+# Timing Configuration
+HEARTBEAT_INTERVAL = 900  # 15 minutes (in seconds)
+QUERY_INTERVAL = 30       # 30 seconds
+
 # Credentials
 API_KEY = os.getenv("SEATS_API_KEY")
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 DISCORD_USER_ID = "787603445729329163"
 
-# Region Mapping
+# Global tracker for heartbeats
+last_discord_time = 0 
+
 REGIONS = {
     "MIDDLE EAST": ["DOH", "DXB", "AUH", "IST"],
     "EAST ASIA & OCEANIA": ["HKG", "SIN", "AKL", "SYD", "SGN", "HAN"]
 }
 
 def get_pst_now():
-    """Returns current datetime object in PST."""
     pst_tz = timezone(timedelta(hours=-8))
     return datetime.now(pst_tz)
 
 def to_pst_clock(utc_str):
-    """Converts API UTC timestamp to PST clock time."""
     try:
         utc_dt = datetime.fromisoformat(utc_str.replace('Z', '+00:00'))
         pst_tz = timezone(timedelta(hours=-8))
@@ -39,11 +43,12 @@ def to_pst_clock(utc_str):
         return "??:?? PM"
 
 def check_flights(last_fingerprint, is_high_freq):
+    global last_discord_time
     pst_now = get_pst_now()
     pst_label = pst_now.strftime('%Y-%m-%d %I:%M:%S %p PST')
-    mode_label = "🚀 HIGH FREQUENCY" if is_high_freq else "⏲️ STANDARD"
+    mode_label = "🚀 HIGH FREQ" if is_high_freq else "⏲️ STANDARD"
     
-    print(f"[{pst_label}] [{mode_label}] Querying availability...")
+    print(f"[{pst_label}] Querying...")
     
     url = "https://seats.aero/partnerapi/search"
     headers = {"Partner-Authorization": API_KEY, "accept": "application/json"}
@@ -88,25 +93,36 @@ def check_flights(last_fingerprint, is_high_freq):
                         break
                 all_results.append(flight)
 
-    if not all_results:
-        return "NONE"
-
-    current_fp = "|".join(sorted([f"{f['route']}:{f['date']}:{f['cost']}" for f in all_results]))
+    # Create Fingerprint
+    current_fp = "NONE" if not all_results else "|".join(sorted([f"{f['route']}:{f['date']}:{f['cost']}" for f in all_results]))
     
+    current_time = time.time()
+
+    # LOGIC: If data is identical to last time
     if current_fp == last_fingerprint:
-        # Heartbeat
-        if DISCORD_WEBHOOK:
-            requests.post(DISCORD_WEBHOOK, json={"content": f"{mode_label} [{pst_label}] No changes."})
+        # Only send heartbeat if HEARTBEAT_INTERVAL has passed
+        if (current_time - last_discord_time) >= HEARTBEAT_INTERVAL:
+            if DISCORD_WEBHOOK:
+                requests.post(DISCORD_WEBHOOK, json={"content": f"ℹ️ {mode_label} Status: No changes in last 15m. Still searching..."})
+            last_discord_time = current_time
+            print("   -> Heartbeat sent to Discord.")
+        else:
+            print("   -> No changes. (Quiet mode)")
         return current_fp
 
-    # ALERT
-    mention = f"<@{DISCORD_USER_ID}> "
-    msg = f"{mention}🔥 **SAVER UPDATE ({pst_label})** 🔥\n"
-    for region, flights in categorized.items():
-        if not flights: continue
-        msg += f"\n📍 **{region}**\n"
-        for f in sorted(flights, key=lambda x: x['date'], reverse=True):
-            msg += f"✅ {f['route']} | {f['date']} | {f['cost']} Avios | *Seen {f['last_seen']}*\n"
+    # LOGIC: DATA HAS CHANGED (Alert Mode)
+    last_discord_time = current_time # Reset heartbeat timer because we are sending a message now
+    
+    if current_fp == "NONE":
+        msg = f"📉 **Availability Cleared ({pst_label})** - No saver seats currently found."
+    else:
+        mention = f"<@{DISCORD_USER_ID}> "
+        msg = f"{mention}🔥 **SAVER UPDATE ({pst_label})** 🔥\n"
+        for region, flights in categorized.items():
+            if not flights: continue
+            msg += f"\n📍 **{region}**\n"
+            for f in sorted(flights, key=lambda x: x['date'], reverse=True):
+                msg += f"✅ {f['route']} | {f['date']} | {f['cost']} Avios | *Seen {f['last_seen']}*\n"
 
     if DISCORD_WEBHOOK:
         requests.post(DISCORD_WEBHOOK, json={"content": msg})
@@ -121,19 +137,16 @@ if __name__ == "__main__":
             with open(STATE_FILE, "r") as f: last_fp = f.read().strip()
         except: pass
 
-    start_time = time.time()
-    # Continuous loop for 55 minutes
-    while time.time() - start_time < 3300: 
+    # Continuous loop
+    while True: 
         pst_now = get_pst_now()
         
-        # LOGIC: If between 2:30 PM and 5:30 PM PST, increase frequency
-        # This covers the 4:00 PM release window with a buffer
+        # High frequency window: 2:30 PM - 5:30 PM PST
         is_release_window = (pst_now.hour == 14 and pst_now.minute >= 30) or \
                              (pst_now.hour in [15, 16]) or \
                              (pst_now.hour == 17 and pst_now.minute <= 30)
         
         last_fp = check_flights(last_fp, is_release_window)
         
-        # Sleep 60s during release window, 300s otherwise
-        sleep_time = 60 if is_release_window else 300
-        time.sleep(sleep_time)
+        # Always sleep 30s as requested
+        time.sleep(QUERY_INTERVAL)
