@@ -19,7 +19,7 @@ DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 DISCORD_USER_ID = "787603445729329163"
 
 # Heartbeat Settings
-HEARTBEAT_INTERVAL = 900  # 15 minutes (in seconds)
+HEARTBEAT_INTERVAL = 900  # 15 minutes
 last_discord_time = 0     # Tracks when we last messaged Discord
 
 REGIONS = {
@@ -45,7 +45,7 @@ def check_flights(last_fingerprint, is_high_freq):
     pst_label = pst_now.strftime('%Y-%m-%d %I:%M:%S %p PST')
     mode_label = "🚀 HIGH FREQUENCY" if is_high_freq else "⏲️ STANDARD"
     
-    print(f"[{pst_label}] [{mode_label}] Querying availability...")
+    print(f"[{pst_label}] [{mode_label}] Querying...")
     
     url = "https://seats.aero/partnerapi/search"
     headers = {"Partner-Authorization": API_KEY, "accept": "application/json"}
@@ -76,12 +76,17 @@ def check_flights(last_fingerprint, is_high_freq):
                 route_data = item.get('Route', {})
                 origin = route_data.get('OriginAirport') or item.get('OriginAirport') or "???"
                 dest = route_data.get('DestinationAirport') or item.get('DestinationAirport') or "???"
+                date = item.get("Date")
+                
+                # Construct Seats.aero search link
+                search_url = f"https://seats.aero/search?origin={origin}&destination={dest}"
                 
                 flight = {
-                    "route": f"{origin}->{dest}",
-                    "date": item.get("Date"),
+                    "route": f"{origin} ✈️ {dest}",
+                    "date": date,
                     "cost": f"{cost:,}",
                     "last_seen": to_pst_clock(item.get("UpdatedAt", "")),
+                    "link": search_url,
                     "dest": dest
                 }
                 for region, codes in REGIONS.items():
@@ -90,28 +95,25 @@ def check_flights(last_fingerprint, is_high_freq):
                         break
                 all_results.append(flight)
 
-    # Generate current fingerprint
     current_fp = "NONE" if not all_results else "|".join(sorted([f"{f['route']}:{f['date']}:{f['cost']}" for f in all_results]))
-    
     current_time = time.time()
 
     # --- DISCORD LOGIC ---
     
-    # 1. NO CHANGES detected
+    # 1. NO CHANGES
     if current_fp == last_fingerprint:
-        # Only send heartbeat if 15 minutes have passed
         if (current_time - last_discord_time) >= HEARTBEAT_INTERVAL:
             msg = f"ℹ️ **Status Check** [{pst_label}]\nNo changes found in {mode_label} mode."
             if DISCORD_WEBHOOK:
                 requests.post(DISCORD_WEBHOOK, json={"content": msg})
-            last_discord_time = current_time # Reset heartbeat timer
-            print("   -> 15m Heartbeat sent.")
+            last_discord_time = current_time
+            print("   -> Heartbeat sent.")
         else:
-            print(f"   -> No changes. (Next heartbeat in {int((HEARTBEAT_INTERVAL - (current_time - last_discord_time))/60)} mins)")
+            print(f"   -> No changes. (Quiet)")
         return current_fp
 
-    # 2. CHANGE detected (Flights added or removed)
-    last_discord_time = current_time # Reset heartbeat timer because we are sending an update
+    # 2. CHANGE DETECTED
+    last_discord_time = current_time
     
     if current_fp == "NONE":
         msg = f"📉 **Availability Cleared ({pst_label})** - No saver seats currently found."
@@ -121,8 +123,10 @@ def check_flights(last_fingerprint, is_high_freq):
         for region, flights in categorized.items():
             if not flights: continue
             msg += f"\n📍 **{region}**\n"
-            for f in sorted(flights, key=lambda x: x['date'], reverse=True):
-                msg += f"✅ {f['route']} | {f['date']} | {f['cost']} Avios | *Seen {f['last_seen']}*\n"
+            # Sort by date
+            for f in sorted(flights, key=lambda x: x['date']):
+                # Using Discord Markdown for the link: [Text](URL)
+                msg += f"✅ {f['date']} | **{f['route']}** | {f['cost']} Avios | [View Search]({f['link']}) | *Seen {f['last_seen']}*\n"
 
     if DISCORD_WEBHOOK:
         requests.post(DISCORD_WEBHOOK, json={"content": msg})
@@ -140,13 +144,13 @@ if __name__ == "__main__":
     while True: 
         pst_now = get_pst_now()
         
-        # RELEASE WINDOW LOGIC: 2:30 PM - 5:30 PM PST
+        # Release window: 2:30 PM - 5:30 PM PST
         is_release_window = (pst_now.hour == 14 and pst_now.minute >= 30) or \
                              (pst_now.hour in [15, 16]) or \
                              (pst_now.hour == 17 and pst_now.minute <= 30)
         
         last_fp = check_flights(last_fp, is_release_window)
         
-        # Sleep 30s during release window, 300s otherwise
+        # 30s frequency in window, 300s otherwise
         sleep_time = 30 if is_release_window else 300
         time.sleep(sleep_time)
