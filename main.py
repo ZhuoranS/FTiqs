@@ -13,17 +13,14 @@ CABIN_CODE = "J"
 SAVER_THRESHOLD = 125000
 STATE_FILE = "last_seen_savers.json"
 
-# Timing Configuration
-HEARTBEAT_INTERVAL = 900  # 15 minutes (in seconds)
-QUERY_INTERVAL = 30       # 30 seconds
-
 # Credentials
 API_KEY = os.getenv("SEATS_API_KEY")
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 DISCORD_USER_ID = "787603445729329163"
 
-# Global tracker for heartbeats
-last_discord_time = 0 
+# Heartbeat Settings
+HEARTBEAT_INTERVAL = 900  # 15 minutes (in seconds)
+last_discord_time = 0     # Tracks when we last messaged Discord
 
 REGIONS = {
     "MIDDLE EAST": ["DOH", "DXB", "AUH", "IST"],
@@ -46,9 +43,9 @@ def check_flights(last_fingerprint, is_high_freq):
     global last_discord_time
     pst_now = get_pst_now()
     pst_label = pst_now.strftime('%Y-%m-%d %I:%M:%S %p PST')
-    mode_label = "🚀 HIGH FREQ" if is_high_freq else "⏲️ STANDARD"
+    mode_label = "🚀 HIGH FREQUENCY" if is_high_freq else "⏲️ STANDARD"
     
-    print(f"[{pst_label}] Querying...")
+    print(f"[{pst_label}] [{mode_label}] Querying availability...")
     
     url = "https://seats.aero/partnerapi/search"
     headers = {"Partner-Authorization": API_KEY, "accept": "application/json"}
@@ -93,25 +90,28 @@ def check_flights(last_fingerprint, is_high_freq):
                         break
                 all_results.append(flight)
 
-    # Create Fingerprint
+    # Generate current fingerprint
     current_fp = "NONE" if not all_results else "|".join(sorted([f"{f['route']}:{f['date']}:{f['cost']}" for f in all_results]))
     
     current_time = time.time()
 
-    # LOGIC: If data is identical to last time
+    # --- DISCORD LOGIC ---
+    
+    # 1. NO CHANGES detected
     if current_fp == last_fingerprint:
-        # Only send heartbeat if HEARTBEAT_INTERVAL has passed
+        # Only send heartbeat if 15 minutes have passed
         if (current_time - last_discord_time) >= HEARTBEAT_INTERVAL:
+            msg = f"ℹ️ **Status Check** [{pst_label}]\nNo changes found in {mode_label} mode."
             if DISCORD_WEBHOOK:
-                requests.post(DISCORD_WEBHOOK, json={"content": f"ℹ️ {mode_label} Status: No changes in last 15m. Still searching..."})
-            last_discord_time = current_time
-            print("   -> Heartbeat sent to Discord.")
+                requests.post(DISCORD_WEBHOOK, json={"content": msg})
+            last_discord_time = current_time # Reset heartbeat timer
+            print("   -> 15m Heartbeat sent.")
         else:
-            print("   -> No changes. (Quiet mode)")
+            print(f"   -> No changes. (Next heartbeat in {int((HEARTBEAT_INTERVAL - (current_time - last_discord_time))/60)} mins)")
         return current_fp
 
-    # LOGIC: DATA HAS CHANGED (Alert Mode)
-    last_discord_time = current_time # Reset heartbeat timer because we are sending a message now
+    # 2. CHANGE detected (Flights added or removed)
+    last_discord_time = current_time # Reset heartbeat timer because we are sending an update
     
     if current_fp == "NONE":
         msg = f"📉 **Availability Cleared ({pst_label})** - No saver seats currently found."
@@ -137,16 +137,16 @@ if __name__ == "__main__":
             with open(STATE_FILE, "r") as f: last_fp = f.read().strip()
         except: pass
 
-    # Continuous loop
     while True: 
         pst_now = get_pst_now()
         
-        # High frequency window: 2:30 PM - 5:30 PM PST
+        # RELEASE WINDOW LOGIC: 2:30 PM - 5:30 PM PST
         is_release_window = (pst_now.hour == 14 and pst_now.minute >= 30) or \
                              (pst_now.hour in [15, 16]) or \
                              (pst_now.hour == 17 and pst_now.minute <= 30)
         
         last_fp = check_flights(last_fp, is_release_window)
         
-        # Always sleep 30s as requested
-        time.sleep(QUERY_INTERVAL)
+        # Sleep 30s during release window, 300s otherwise
+        sleep_time = 30 if is_release_window else 300
+        time.sleep(sleep_time)
