@@ -5,21 +5,32 @@ import json
 from datetime import datetime, timedelta, timezone
 
 # --- Configuration ---
-# You can add as many query blocks as you want here
+# You can now customize sources and intervals per query.
+# Intervals are in seconds.
 SEARCH_QUERIES = [
     {
+        "label": "SFO->ASA (Qatar/PST Release Focus)",
         "origins": "SFO,LAX,SEA",
         "destinations": "DOH,DXB,AUH,IST,HKG,SIN,AKL,SYD,SGN,HAN,HND,NRT,TPE,ICN,PEK,PVG,PKX",
+        "sources": "qatar",  # Custom source
         "start_date": "2026-12-10",
         "end_date": "2026-12-28",
-        "label": "SFO->ASA"
+        "high_freq_interval": 180,   # Check every 180s during release window
+        "std_interval": 900,        # Check every 10m normally
+        "last_run": 0,
+        "fingerprint": ""
     },
     {
+        "label": "ASA->SFO (Multi-Source)",
         "origins": "HKG,SIN,HND,NRT,TPE,ICN,PEK,PVG,PKX",
         "destinations": "SFO,LAX,SEA,YVR,PHX,ORD,YYZ,JFK,EWR,BOS,DFW,IAH,SNA,ONT",
+        "sources": "qatar,lifemiles,alaska", # Multiple custom sources
         "start_date": "2027-01-02",
         "end_date": "2027-01-11",
-        "label": "ASA->SFO"
+        "high_freq_interval": 90,  # Check every 1.5m during release window
+        "std_interval": 600,        # Check every 10m normally
+        "last_run": 0,
+        "fingerprint": ""
     }
 ]
 
@@ -32,9 +43,8 @@ API_KEY = os.getenv("SEATS_API_KEY")
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 DISCORD_USER_ID = "787603445729329163"
 
-# Heartbeat Settings
-HEARTBEAT_INTERVAL = 1200  # 20 minutes
-last_discord_time = 0     # Tracks when we last messaged Discord
+HEARTBEAT_INTERVAL = 1200
+last_discord_heartbeat = 0
 
 REGIONS = {
     "MIDDLE EAST": ["DOH", "DXB", "AUH", "IST"],
@@ -43,58 +53,45 @@ REGIONS = {
 }
 
 def get_pst_now():
-    pst_tz = timezone(timedelta(hours=-8))
-    return datetime.now(pst_tz)
+    return datetime.now(timezone(timedelta(hours=-8)))
 
 def to_pst_clock(utc_str):
     try:
         utc_dt = datetime.fromisoformat(utc_str.replace('Z', '+00:00'))
-        pst_tz = timezone(timedelta(hours=-8))
-        return utc_dt.astimezone(pst_tz).strftime('%I:%M %p')
+        return utc_dt.astimezone(timezone(timedelta(hours=-8))).strftime('%I:%M %p')
     except:
         return "??:?? PM"
 
-def check_flights(last_fingerprint, is_high_freq):
-    global last_discord_time
+def process_query(query, is_high_freq):
     pst_now = get_pst_now()
-    pst_label = pst_now.strftime('%Y-%m-%d %I:%M:%S %p PST')
-    mode_label = "🚀 HIGH FREQUENCY" if is_high_freq else "⏲️ STANDARD"
+    pst_label = pst_now.strftime('%I:%M:%S %p')
     
-    print(f"[{pst_label}] [{mode_label}] Starting checks for {len(SEARCH_QUERIES)} queries...")
+    print(f"[{pst_label}] Running: {query['label']} (Sources: {query['sources']})")
     
     headers = {"Partner-Authorization": API_KEY, "accept": "application/json"}
     url = "https://seats.aero/partnerapi/search"
-    
-    all_raw_data = []
-    
-    # 1. Execute all queries
-    for query in SEARCH_QUERIES:
-        params = {
-            "origin_airport": query["origins"],
-            "destination_airport": query["destinations"],
-            "start_date": query["start_date"],
-            "end_date": query["end_date"],
-            "sources": "qatar",
-            "take": 1000
-        }
-        try:
-            response = requests.get(url, headers=headers, params=params)
-            response.raise_for_status()
-            data = response.json().get('data', [])
-            all_raw_data.extend(data)
-            # Short sleep between queries to respect API rate limits
-            time.sleep(1) 
-        except Exception as e:
-            print(f"API Error on {query['label']}: {e}")
+    params = {
+        "origin_airport": query["origins"],
+        "destination_airport": query["destinations"],
+        "start_date": query["start_date"],
+        "end_date": query["end_date"],
+        "sources": query["sources"],
+        "take": 1000
+    }
 
-    # 2. Process and Deduplicate
-    categorized = {region: [] for region in REGIONS.keys()}
-    categorized["OTHER"] = [] # For destinations not in the REGIONS list
-    
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        data = response.json().get('data', [])
+    except Exception as e:
+        print(f"   ! API Error: {e}")
+        return query['fingerprint']
+
     all_results = []
-    seen_flight_keys = set() # Prevent duplicates if queries overlap
+    categorized = {region: [] for region in REGIONS.keys()}
+    categorized["OTHER"] = []
 
-    for item in all_raw_data:
+    for item in data:
         if item.get(f"{CABIN_CODE}Available"):
             cost = int(item.get(f"{CABIN_CODE}MileageCost", "0"))
             if cost < SAVER_THRESHOLD:
@@ -103,20 +100,13 @@ def check_flights(last_fingerprint, is_high_freq):
                 dest = route_data.get('DestinationAirport') or item.get('DestinationAirport') or "???"
                 date = item.get("Date")
                 
-                # Unique key for deduplication
-                flight_key = f"{origin}-{dest}-{date}-{cost}"
-                if flight_key in seen_flight_keys:
-                    continue
-                seen_flight_keys.add(flight_key)
-                
-                search_url = f"https://seats.aero/search?origin={origin}&destination={dest}"
                 flight = {
                     "route": f"{origin} ✈️ {dest}",
                     "date": date,
                     "cost": f"{cost:,}",
                     "last_seen": to_pst_clock(item.get("UpdatedAt", "")),
-                    "link": search_url,
-                    "dest": dest
+                    "link": f"https://seats.aero/search?origin={origin}&destination={dest}",
+                    "source": item.get("Source", "Unknown")
                 }
                 
                 assigned = False
@@ -125,72 +115,79 @@ def check_flights(last_fingerprint, is_high_freq):
                         categorized[region].append(flight)
                         assigned = True
                         break
-                if not assigned:
-                    categorized["OTHER"].append(flight)
-                    
+                if not assigned: categorized["OTHER"].append(flight)
                 all_results.append(flight)
 
-    # 3. Fingerprinting (Sorted to ensure consistency)
-    current_fp = "NONE" if not all_results else "|".join(sorted([f"{f['route']}:{f['date']}:{f['cost']}" for f in all_results]))
-    current_time = time.time()
+    # Fingerprint includes source to detect if the same seat appears on a different program
+    new_fp = "NONE" if not all_results else "|".join(sorted([f"{f['route']}:{f['date']}:{f['cost']}:{f['source']}" for f in all_results]))
 
-    # --- DISCORD LOGIC ---
+    if new_fp != query['fingerprint']:
+        send_discord_alert(query['label'], categorized, new_fp == "NONE")
+        return new_fp
     
-    # NO CHANGES
-    if current_fp == last_fingerprint:
-        if (current_time - last_discord_time) >= HEARTBEAT_INTERVAL:
-            msg = f"ℹ️ **Status Check** [{pst_label}]\nNo changes found across {len(SEARCH_QUERIES)} searches in {mode_label} mode."
-            if DISCORD_WEBHOOK:
-                requests.post(DISCORD_WEBHOOK, json={"content": msg})
-            last_discord_time = current_time
-            print("   -> Heartbeat sent.")
-        else:
-            print(f"   -> No changes. (Quiet)")
-        return current_fp
+    return query['fingerprint']
 
-    # CHANGE DETECTED
-    last_discord_time = current_time
-    
-    if current_fp == "NONE":
-        msg = f"📉 **Availability Cleared ({pst_label})** - No saver seats currently found in any searches."
+def send_discord_alert(label, categorized, cleared):
+    pst_now = get_pst_now().strftime('%Y-%m-%d %I:%M %p PST')
+    if cleared:
+        msg = f"📉 **Availability Cleared: {label}** ({pst_now})"
     else:
-        mention = f"<@{DISCORD_USER_ID}> "
-        msg = f"{mention}🔥 **SAVER UPDATE ({pst_label})** 🔥\n"
+        msg = f"<@{DISCORD_USER_ID}> 🔥 **SAVER UPDATE: {label}** 🔥\n*Refreshed at {pst_now}*\n"
         for region, flights in categorized.items():
             if not flights: continue
             msg += f"\n📍 **{region}**\n"
             for f in sorted(flights, key=lambda x: x['date']):
-                msg += f"✅ {f['date']} | **{f['route']}** | {f['cost']} Avios | <[View Search]({f['link']})> | *Seen {f['last_seen']}*\n"
+                msg += f"✅ {f['date']} | **{f['route']}** | {f['cost']} ({f['source']}) | <[Link]({f['link']})> | *{f['last_seen']}*\n"
 
     if DISCORD_WEBHOOK:
-        # Check Discord's 2000 character limit
         if len(msg) > 2000:
             for x in range(0, len(msg), 2000):
                 requests.post(DISCORD_WEBHOOK, json={"content": msg[x:x+2000]})
         else:
             requests.post(DISCORD_WEBHOOK, json={"content": msg})
-    
-    with open(STATE_FILE, "w") as f: 
-        f.write(current_fp)
-    return current_fp
 
 if __name__ == "__main__":
-    last_fp = ""
+    # Load state
     if os.path.exists(STATE_FILE):
         try:
-            with open(STATE_FILE, "r") as f: last_fp = f.read().strip()
+            with open(STATE_FILE, "r") as f:
+                saved_states = json.load(f)
+                for q in SEARCH_QUERIES:
+                    q['fingerprint'] = saved_states.get(q['label'], "")
         except: pass
 
-    while True: 
+    print("Checking started. Per-query intervals active.")
+
+    while True:
         pst_now = get_pst_now()
+        current_ts = time.time()
         
-        # Release window: 2:30 PM - 5:30 PM PST
+        # Determine if we are in the Release Window (2:30 PM - 5:30 PM PST)
         is_release_window = (pst_now.hour == 14 and pst_now.minute >= 30) or \
                              (pst_now.hour in [15, 16]) or \
                              (pst_now.hour == 17 and pst_now.minute <= 30)
-        
-        last_fp = check_flights(last_fp, is_release_window)
-        
-        # 90s frequency in window, 600s otherwise
-        sleep_time = 90 if is_release_window else 600
-        time.sleep(sleep_time)
+
+        any_query_run = False
+
+        for query in SEARCH_QUERIES:
+            interval = query['high_freq_interval'] if is_release_window else query['std_interval']
+            
+            # Check if it is time to run this specific query
+            if current_ts - query['last_run'] >= interval:
+                query['fingerprint'] = process_query(query, is_release_window)
+                query['last_run'] = current_ts
+                any_query_run = True
+
+        # Save state if any changes happened
+        if any_query_run:
+            with open(STATE_FILE, "w") as f:
+                json.dump({q['label']: q['fingerprint'] for q in SEARCH_QUERIES}, f)
+
+        # Heartbeat (Global status)
+        if current_ts - last_discord_heartbeat >= HEARTBEAT_INTERVAL:
+            mode = "🚀 HIGH FREQ" if is_release_window else "⏲️ STANDARD"
+            requests.post(DISCORD_WEBHOOK, json={"content": f"ℹ️ **Status Check**: Bot is active. Mode: {mode}. Monitoring {len(SEARCH_QUERIES)} queries."})
+            last_discord_heartbeat = current_ts
+
+        # Small sleep to prevent CPU spiking
+        time.sleep(5)
