@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 # --- Configuration ---
 ORIGINS = "SFO,LAX,SEA"
 DESTINATIONS = "DOH,DXB,AUH,IST,HKG,SIN,AKL,SYD,SGN,HAN"
-START_DATE = "2026-12-01"
+START_DATE = "2026-12-10"
 END_DATE = "2026-12-28"
 CABIN_CODE = "J"
 SAVER_THRESHOLD = 125000
