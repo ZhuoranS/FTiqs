@@ -137,7 +137,7 @@ def send_discord_alert(label, categorized, cleared):
             if not flights: continue
             msg += f"\n📍 **{region}**\n"
             for f in sorted(flights, key=lambda x: x['date']):
-                msg += f"✅ {f['date']} | **{f['route']}** | {f['cost']} ({f['source']}) | <[Link]({f['link']})> | *{f['last_seen']}*\n"
+                msg += f"✅ {f['date']} | **{f['route']}** | {f['cost']} ({f['source']}) | [Link]({f['link']}) | *{f['last_seen']}*\n"
 
     if DISCORD_WEBHOOK:
         if len(msg) > 2000:
