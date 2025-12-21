@@ -19,12 +19,12 @@ DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 DISCORD_USER_ID = "787603445729329163"
 
 # Heartbeat Settings
-HEARTBEAT_INTERVAL = 900  # 15 minutes
+HEARTBEAT_INTERVAL = 1200  # 20 minutes
 last_discord_time = 0     # Tracks when we last messaged Discord
 
 REGIONS = {
     "MIDDLE EAST": ["DOH", "DXB", "AUH", "IST"],
-    "EAST ASIA & OCEANIA": ["HKG", "SIN", "AKL", "SYD", "SGN", "HAN"]
+    "EAST ASIA & OCEANIA": ["HKG", "SIN", "AKL", "SYD", "SGN", "HAN", "HND", "NRT", "TPE", "SIN", "ICN", "PEK", "PVG", "PKX"]
 }
 
 def get_pst_now():
