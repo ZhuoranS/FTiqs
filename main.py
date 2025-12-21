@@ -25,8 +25,8 @@ SEARCH_QUERIES = [
         "origins": "HKG,SIN,HND,NRT,TPE,ICN,PEK,PVG,PKX",
         "destinations": "SFO,LAX,SEA,YVR,PHX,ORD,YYZ,JFK,EWR,BOS,DFW,IAH,SNA,ONT",
         "sources": "qatar,lifemiles,alaska", # Multiple custom sources
-        "start_date": "2027-01-02",
-        "end_date": "2027-01-11",
+        "start_date": "2026-12-05",
+        "end_date": "2026-12-29",
         "high_freq_interval": 90,  # Check every 1.5m during release window
         "std_interval": 600,        # Check every 10m normally
         "last_run": 0,
