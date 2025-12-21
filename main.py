@@ -12,14 +12,14 @@ SEARCH_QUERIES = [
         "destinations": "DOH,DXB,AUH,IST,HKG,SIN,AKL,SYD,SGN,HAN,HND,NRT,TPE,ICN,PEK,PVG,PKX",
         "start_date": "2026-12-10",
         "end_date": "2026-12-28",
-        "label": "West Coast to Middle East"
+        "label": "SFO->ASA"
     },
     {
-        "origins": "HKG,SIN,AKL,SYD,SGN,HAN,HND,NRT,TPE,ICN,PEK,PVG,PKX",
-        "destinations": "SFO,LAX,SEA,YVR,PHX,ORD,YYZ,NYC,BOS,DFW,IAH",
-        "start_date": "2026-12-10",
-        "end_date": "2026-12-28",
-        "label": "West Coast to Asia/Oceania"
+        "origins": "HKG,SIN,HND,NRT,TPE,ICN,PEK,PVG,PKX",
+        "destinations": "SFO,LAX,SEA,YVR,PHX,ORD,YYZ,JFK,EWR,BOS,DFW,IAH,SNA,ONT",
+        "start_date": "2027-01-02",
+        "end_date": "2027-01-11",
+        "label": "ASA->SFO"
     }
 ]
 
@@ -39,7 +39,7 @@ last_discord_time = 0     # Tracks when we last messaged Discord
 REGIONS = {
     "MIDDLE EAST": ["DOH", "DXB", "AUH", "IST"],
     "EAST ASIA & OCEANIA": ["HKG", "SIN", "AKL", "SYD", "SGN", "HAN", "HND", "NRT", "TPE", "ICN", "PEK", "PVG", "PKX"],
-    "NORAM": ["SFO", "LAX", "SEA", "YVR", "PHX", "ORD", "YYZ", "NYC", "BOS", "DFW", "IAH"]
+    "NORAM": ["SFO", "SNA", "ONT", "LAX", "SEA", "YVR", "PHX", "ORD", "YYZ", "JFK", "EWR", "BOS", "DFW", "IAH"]
 }
 
 def get_pst_now():
@@ -191,6 +191,6 @@ if __name__ == "__main__":
         
         last_fp = check_flights(last_fp, is_release_window)
         
-        # 60s frequency in window, 600s otherwise
-        sleep_time = 60 if is_release_window else 600
+        # 90s frequency in window, 600s otherwise
+        sleep_time = 90 if is_release_window else 600
         time.sleep(sleep_time)
