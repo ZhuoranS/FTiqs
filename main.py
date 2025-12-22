@@ -127,17 +127,76 @@ def process_query(query, is_high_freq):
     
     return query['fingerprint']
 
+def group_consecutive_dates(flights):
+    """
+    Groups flights by (route, cost, source, link) and combines consecutive dates.
+    Returns strings formatted with dashes (YYYY-MM-DD).
+    """
+    from itertools import groupby
+    from operator import itemgetter
+
+    # 1. Group by the unique attributes of the flight (excluding the date)
+    flights.sort(key=lambda x: (x['route'], x['cost'], x['source'], x['date']))
+    
+    grouped_output = []
+    
+    for key, group in groupby(flights, key=lambda x: (x['route'], x['cost'], x['source'], x['link'])):
+        route, cost, source, link = key
+        sorted_group = sorted(list(group), key=lambda x: x['date'])
+        
+        # 2. Find consecutive date ranges
+        ranges = []
+        if sorted_group:
+            start_item = sorted_group[0]
+            prev_item = sorted_group[0]
+            
+            for i in range(1, len(sorted_group)):
+                curr_item = sorted_group[i]
+                
+                # Check if dates are consecutive
+                d1 = datetime.strptime(prev_item['date'], "%Y-%m-%d")
+                d2 = datetime.strptime(curr_item['date'], "%Y-%m-%d")
+                
+                if d2 == d1 + timedelta(days=1):
+                    prev_item = curr_item
+                else:
+                    ranges.append((start_item['date'], prev_item['date']))
+                    start_item = curr_item
+                    prev_item = curr_item
+            
+            ranges.append((start_item['date'], prev_item['date']))
+
+        # 3. Format strings back to YYYY-MM-DD
+        for start_date, end_date in ranges:
+            # Reverted to simple start-end format with dashes
+            date_str = start_date if start_date == end_date else f"{start_date}-{end_date}"
+            
+            last_seen = sorted_group[-1]['last_seen']
+            
+            grouped_output.append({
+                "line": f"✅ {date_str} | **{route}** | {cost} ({source}) | [Link]({link}) | *{last_seen}*",
+                "sort_date": start_date 
+            })
+            
+    return grouped_output
+
 def send_discord_alert(label, categorized, cleared):
     pst_now = get_pst_now().strftime('%Y-%m-%d %I:%M %p PST')
     if cleared:
         msg = f"📉 **Availability Cleared: {label}** ({pst_now})"
     else:
         msg = f"<@{DISCORD_USER_ID}> 🔥 **SAVER UPDATE: {label}** 🔥\n*Refreshed at {pst_now}*\n"
+        
         for region, flights in categorized.items():
             if not flights: continue
             msg += f"\n📍 **{region}**\n"
-            for f in sorted(flights, key=lambda x: x['date']):
-                msg += f"✅ {f['date']} | **{f['route']}** | {f['cost']} ({f['source']}) | [Link]({f['link']}) | *{f['last_seen']}*\n"
+            
+            # Use grouping logic
+            grouped_flights = group_consecutive_dates(flights)
+            
+            # Sort by start date
+            for f in sorted(grouped_flights, key=lambda x: x['sort_date']):
+                msg += f["line"] + "\n"
 
     if DISCORD_WEBHOOK:
         if len(msg) > 2000:
