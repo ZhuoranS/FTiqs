@@ -12,22 +12,22 @@ SEARCH_QUERIES = [
         "label": "SFO->ASA (Qatar/PST Release Focus)",
         "origins": "SFO,LAX,SEA",
         "destinations": "DOH,DXB,AUH,IST,HKG,SIN,AKL,SYD,SGN,HAN,HND,NRT,TPE,ICN,PEK,PVG,PKX",
-        "sources": "qatar",  # Custom source
-        "start_date": "2026-12-10",
-        "end_date": "2026-12-28",
-        "high_freq_interval": 180,   # Check every 180s during release window
+        "sources": "qatar,turkish",  # Custom source
+        "start_date": "2026-12-13",
+        "end_date": "2026-12-23",
+        "high_freq_interval": 240,   # Check every 240s during release window
         "std_interval": 900,        # Check every 10m normally
         "last_run": 0,
         "fingerprint": ""
     },
     {
-        "label": "ASA->SFO (Multi-Source)",
+        "label": "ASA->SFO (QR)",
         "origins": "HKG,SIN,HND,NRT,TPE,ICN,PEK,PVG,PKX",
         "destinations": "SFO,LAX,SEA,YVR,PHX,ORD,YYZ,JFK,EWR,BOS,DFW,IAH,SNA,ONT",
-        "sources": "qatar,lifemiles,alaska", # Multiple custom sources
-        "start_date": "2026-12-05",
-        "end_date": "2026-12-29",
-        "high_freq_interval": 90,  # Check every 1.5m during release window
+        "sources": "qatar,lifemiles,alaska,finnair,american,qantas,flyingblue", # Multiple custom sources
+        "start_date": "2027-01-01",
+        "end_date": "2027-01-10",
+        "high_freq_interval": 120,  # Check every 120s during release window
         "std_interval": 600,        # Check every 10m normally
         "last_run": 0,
         "fingerprint": ""
