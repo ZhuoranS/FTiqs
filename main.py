@@ -27,7 +27,7 @@ SEARCH_QUERIES = [
         "sources": "qatar,lifemiles,alaska,finnair,american,qantas,flyingblue", # Multiple custom sources
         "start_date": "2027-01-01",
         "end_date": "2027-01-10",
-        "high_freq_interval": 120,  # Check every 120s during release window
+        "high_freq_interval": 90,  # Check every 120s during release window
         "std_interval": 600,        # Check every 10m normally
         "last_run": 0,
         "fingerprint": ""
